@@ -171,6 +171,7 @@ int main(int argc, const char * argv[]) {
             return -1;
         }
         
+        printf("madb: Default ADB couldn't find the device. Checking with a new adb server at port:%d\n", port);
         stringstream startCommand;
         startCommand << "adb -P " << port << " start-server";
         RunAndGetOutput(startCommand.str().c_str());
