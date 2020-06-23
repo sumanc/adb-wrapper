@@ -7,7 +7,8 @@
 //
 
 #include <stdio.h>
-#include <string>
+#include <string.h>
+#include <strings.h>
 #include <iostream>
 #include <sstream>
 #include <unistd.h>
@@ -15,6 +16,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
+#include <fcntl.h>
 
 using namespace std;
 
@@ -75,16 +77,30 @@ bool IsLocalPortFree(int port) {
     return ret;
 }
 
-int FindAPort() {
+void ReleasePort(int port) {
+    char fn[10] = {0};
+    sprintf(fn, "%d.lock", port);
+    remove(fn);
+}
+
+int GetAPort() {
     //get a port between 6000 and 7000
     int port = 0;
     for (int i = 6000; i < 7000; i++) {
         bool isFree = IsLocalPortFree(i);
         if (isFree) {
+            char fn[10] = {0};
+            sprintf(fn, "%d.lock", i);
+            int fd = open(fn, O_WRONLY | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
+            if (fd < 0) {
+                continue;
+            }
+            close(fd);
             port = i;
             break;
         }
     }
+    
     return port;
 }
 
@@ -108,7 +124,7 @@ int main(int argc, const char * argv[]) {
         system(command.c_str());
         std::size_t found = command.find("devices");
         if (found != std::string::npos) {
-            int port = FindAPort();
+            int port = GetAPort();
             if (port == 0) {
                 return 0;
             }
@@ -130,6 +146,7 @@ int main(int argc, const char * argv[]) {
             stringstream killCommand;
             killCommand << "adb -P " << port << " kill-server";
             system(killCommand.str().c_str());
+            ReleasePort(port);
         }
     }
     else {
@@ -147,7 +164,7 @@ int main(int argc, const char * argv[]) {
             pch = strtok(NULL, "\n\t");
         }
 
-        int port = FindAPort();
+        int port = GetAPort();
         
         if (port == 0) {
             cout << "*** No free port found to run adb server ***" << endl;
@@ -155,12 +172,18 @@ int main(int argc, const char * argv[]) {
         }
         
         stringstream startCommand;
-        startCommand << "adb -P " << port << " " << commandArgs.str();
-        system(startCommand.str().c_str());
+        startCommand << "adb -P " << port << " start-server";
+        RunAndGetOutput(startCommand.str().c_str());
+        
+        stringstream runCommand;
+        runCommand << "adb -P " << port << " " << commandArgs.str();
+        system(runCommand.str().c_str());
         
         stringstream killCommand;
         killCommand << "adb -P " << port << " kill-server";
-        system(killCommand.str().c_str());
+        RunAndGetOutput(killCommand.str().c_str());
+        
+        ReleasePort(port);
     }
     return 0;
 }
